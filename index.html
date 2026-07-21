@@ -630,10 +630,10 @@
 
     function uniqueMediaPath(zip) {
       let index = 1;
-      let path = 'xl/media/bradesco.png';
+      let path = 'xl/media/Bradesco.png';
       while (zip.file(path)) {
         index++;
-        path = `xl/media/bradesco_${index}.png`;
+        path = `xl/media/Bradesco_${index}.png`;
       }
       return path;
     }
@@ -775,7 +775,7 @@
           `<xdr:from><xdr:col>0</xdr:col><xdr:colOff>170000</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>70000</xdr:rowOff></xdr:from>` +
           `<xdr:to><xdr:col>2</xdr:col><xdr:colOff>150000</xdr:colOff><xdr:row>3</xdr:row><xdr:rowOff>50000</xdr:rowOff></xdr:to>` +
           `<xdr:pic>` +
-            `<xdr:nvPicPr><xdr:cNvPr id="${pictureId}" name="bradesco.png"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
+            `<xdr:nvPicPr><xdr:cNvPr id="${pictureId}" name="Bradesco.png"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
             `<xdr:blipFill><a:blip r:embed="${imageRelId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
             `<xdr:spPr><a:xfrm/><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>` +
           `</xdr:pic>` +
@@ -804,9 +804,6 @@
       try {
         const buffer = await selectedFile.arrayBuffer();
         const zip = await JSZip.loadAsync(buffer);
-        const logoResponse = await fetch('bradesco.png', { cache: 'no-store' });
-        if (!logoResponse.ok) throw new Error('Não encontrei o arquivo bradesco.png no mesmo diretório do index.html.');
-        const logoBytes = await logoResponse.arrayBuffer();
         const parser = new DOMParser();
         const serializer = new XMLSerializer();
 
@@ -829,7 +826,6 @@
 
         let totalRows = 0;
         let totalSheets = 0;
-        const processedSheetPaths = [];
         const standardizedHeaders = new Set();
 
         const sheets = [...workbookXml.getElementsByTagNameNS('*', 'sheet')];
@@ -880,16 +876,11 @@
             zip.file(sheetPath, serializer.serializeToString(sheetXml));
             totalRows += sheetRows;
             totalSheets++;
-            processedSheetPaths.push(sheetPath);
           }
         }
 
         if (!totalSheets) {
           throw new Error('Não encontrei uma aba com os cabeçalhos esperados, como Ticket, Centro de Custo e Tipo.');
-        }
-
-        for (const sheetPath of processedSheetPaths) {
-          await addLogoToWorksheet(zip, sheetPath, logoBytes, parser, serializer);
         }
 
         const blob = await zip.generateAsync({
@@ -909,7 +900,7 @@
         setTimeout(() => URL.revokeObjectURL(url), 1000);
 
         updateSummary(totalRows, standardizedHeaders.size, totalSheets);
-        setStatus('Arquivo preenchido com sucesso. O logo bradesco.png foi inserido e o restante do layout foi preservado.', 'success');
+        setStatus('Arquivo preenchido com sucesso. O logo e todo o layout original da planilha foram preservados.', 'success');
       } catch (error) {
         console.error(error);
         setStatus(error.message || 'Não foi possível preencher o arquivo.', 'error');
