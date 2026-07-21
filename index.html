@@ -620,6 +620,9 @@
         let sourceSheet = null;
         let sourceSheetName = "";
         let matrix = [];
+        let headerRowIndex = -1;
+
+        const normalizedDateAliases = DATE_COLUMN_ALIASES.map(normalizeText);
 
         for (const sheetName of workbook.SheetNames) {
           const candidate = workbook.Sheets[sheetName];
@@ -629,25 +632,37 @@
             raw: true,
             blankrows: false
           });
-          if (candidateMatrix.length >= 2) {
+
+          const scanLimit = Math.min(candidateMatrix.length, 30);
+          let candidateHeaderIndex = -1;
+
+          for (let rowIndex = 0; rowIndex < scanLimit; rowIndex++) {
+            const normalizedRow = candidateMatrix[rowIndex].map(normalizeText);
+            if (normalizedRow.some((value) => normalizedDateAliases.includes(value))) {
+              candidateHeaderIndex = rowIndex;
+              break;
+            }
+          }
+
+          if (candidateHeaderIndex >= 0 && candidateMatrix.length > candidateHeaderIndex + 1) {
             sourceSheet = candidate;
             sourceSheetName = sheetName;
             matrix = candidateMatrix;
+            headerRowIndex = candidateHeaderIndex;
             break;
           }
         }
 
-        if (!sourceSheet || matrix.length < 2) {
-          throw new Error("Nenhuma aba com dados foi encontrada.");
+        if (!sourceSheet || headerRowIndex < 0) {
+          throw new Error("Não encontrei uma aba com a coluna Data de Emissão.");
         }
 
-        const rawHeaders = matrix[0].map((header, index) => {
+        const rawHeaders = matrix[headerRowIndex].map((header, index) => {
           const clean = String(header ?? "").trim();
           return clean || `Coluna ${index + 1}`;
         });
 
         const normalizedHeaders = rawHeaders.map(normalizeText);
-        const normalizedDateAliases = DATE_COLUMN_ALIASES.map(normalizeText);
         const dateColumnIndex = normalizedHeaders.findIndex((header) => normalizedDateAliases.includes(header));
 
         if (dateColumnIndex === -1) {
@@ -665,7 +680,7 @@
         const groups = new Map();
         const rowsWithoutDate = [];
 
-        for (let rowIndex = 1; rowIndex < matrix.length; rowIndex++) {
+        for (let rowIndex = headerRowIndex + 1; rowIndex < matrix.length; rowIndex++) {
           const row = matrix[rowIndex];
           const hasContent = row.some((cell) => String(cell ?? "").trim() !== "");
           if (!hasContent) continue;
