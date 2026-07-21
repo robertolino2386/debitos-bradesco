@@ -4,27 +4,24 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Débitos Copastur | Conversor de Planilhas</title>
-  <meta name="description" content="Remove colunas e separa uma planilha Excel em arquivos por data de emissão." />
-
+  <meta name="description" content="Preenche o layout de débitos ou remove colunas para exportação às demais áreas." />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
-
   <style>
     :root {
-      --bg: #f3f6fb;
-      --surface: #ffffff;
-      --surface-soft: #f8fafc;
-      --primary: #8b1e2d;
-      --primary-dark: #681522;
-      --accent: #d8a724;
-      --text: #172033;
-      --muted: #667085;
-      --border: #dfe5ee;
-      --success: #177245;
-      --danger: #b42318;
-      --shadow: 0 18px 45px rgba(20, 36, 65, 0.10);
-      --radius: 18px;
+      --navy: #08233f;
+      --blue: #0d6efd;
+      --blue-dark: #0756c9;
+      --wine: #8b1e2d;
+      --wine-dark: #681522;
+      --gold: #d8a724;
+      --green: #16834a;
+      --red: #c73939;
+      --text: #1d2a36;
+      --muted: #687784;
+      --line: #dce5ee;
+      --bg: #f3f7fb;
+      --white: #fff;
+      --shadow: 0 18px 50px rgba(8, 35, 63, .12);
     }
 
     * { box-sizing: border-box; }
@@ -35,110 +32,95 @@
       font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--text);
       background:
-        radial-gradient(circle at top right, rgba(216, 167, 36, .12), transparent 28%),
-        linear-gradient(180deg, #eef3f9 0%, var(--bg) 100%);
+        radial-gradient(circle at top right, rgba(216,167,36,.12), transparent 28%),
+        radial-gradient(circle at top left, rgba(13,110,253,.10), transparent 26%),
+        linear-gradient(135deg, #eef5fb 0%, #f8fbfe 55%, #edf4fa 100%);
     }
 
     button, input { font: inherit; }
 
-    .app-shell {
-      width: min(1080px, calc(100% - 32px));
-      margin: 0 auto;
-      padding: 32px 0 48px;
+    .topline {
+      height: 8px;
+      background: linear-gradient(90deg, var(--wine), var(--gold), var(--blue));
     }
 
-    .topbar {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      margin-bottom: 28px;
-    }
-
-    .logo {
-      width: 52px;
-      height: 52px;
-      border-radius: 15px;
-      display: grid;
-      place-items: center;
-      color: #fff;
-      background: linear-gradient(145deg, var(--primary), var(--primary-dark));
-      box-shadow: 0 10px 22px rgba(139, 30, 45, .25);
-      font-weight: 800;
-      letter-spacing: -.04em;
-    }
-
-    .brand h1 {
-      margin: 0;
-      font-size: clamp(1.25rem, 2vw, 1.65rem);
-      letter-spacing: -.03em;
-    }
-
-    .brand p {
-      margin: 4px 0 0;
-      color: var(--muted);
-      font-size: .92rem;
+    .page {
+      width: min(1120px, calc(100% - 32px));
+      margin: 38px auto 48px;
     }
 
     .hero {
-      display: grid;
-      grid-template-columns: 1.15fr .85fr;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       gap: 22px;
-      align-items: stretch;
+      margin-bottom: 24px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .logo {
+      width: 60px;
+      height: 60px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: linear-gradient(145deg, var(--wine), var(--navy));
+      box-shadow: 0 12px 28px rgba(8,35,63,.24);
+      font-size: 19px;
+      font-weight: 900;
+      letter-spacing: -.04em;
+    }
+
+    h1 {
+      margin: 0 0 5px;
+      font-size: clamp(25px, 4vw, 36px);
+      letter-spacing: -.7px;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .badge {
+      padding: 9px 13px;
+      border: 1px solid #cfe1f5;
+      border-radius: 999px;
+      background: rgba(255,255,255,.82);
+      color: var(--navy);
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
     }
 
     .card {
       background: rgba(255,255,255,.96);
-      border: 1px solid rgba(223,229,238,.9);
-      border-radius: var(--radius);
+      border: 1px solid rgba(220,229,238,.9);
+      border-radius: 24px;
       box-shadow: var(--shadow);
+      overflow: hidden;
     }
 
-    .main-card { padding: clamp(22px, 4vw, 38px); }
-
-    .eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--primary);
-      font-size: .78rem;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: .09em;
-    }
-
-    .eyebrow::before {
-      content: "";
-      width: 20px;
-      height: 3px;
-      border-radius: 999px;
-      background: var(--accent);
-    }
-
-    h2 {
-      margin: 12px 0 10px;
-      font-size: clamp(1.65rem, 4vw, 2.65rem);
-      line-height: 1.08;
-      letter-spacing: -.045em;
-    }
-
-    .intro {
-      margin: 0 0 24px;
-      color: var(--muted);
-      line-height: 1.65;
-      max-width: 660px;
-    }
+    .card-body { padding: 30px; }
 
     .dropzone {
-      border: 2px dashed #c9d2df;
-      border-radius: 16px;
-      background: var(--surface-soft);
-      min-height: 230px;
-      padding: 28px;
+      min-height: 235px;
+      border: 2px dashed #aabfd5;
+      border-radius: 20px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       text-align: center;
+      padding: 34px;
+      background: linear-gradient(180deg, #fbfdff, #f3f8fd);
       cursor: pointer;
       transition: .2s ease;
       outline: none;
@@ -147,655 +129,551 @@
     .dropzone:hover,
     .dropzone.dragover,
     .dropzone:focus-visible {
-      border-color: var(--primary);
-      background: #fff8f9;
       transform: translateY(-2px);
+      border-color: var(--blue);
+      background: #eef6ff;
     }
 
-    .upload-icon {
-      width: 62px;
-      height: 62px;
-      border-radius: 18px;
+    .drop-icon {
+      width: 72px;
+      height: 72px;
+      border-radius: 22px;
       display: grid;
       place-items: center;
-      margin-bottom: 14px;
-      color: var(--primary);
-      background: #f8e9ec;
-      font-size: 30px;
+      background: #fff;
+      color: var(--blue);
+      box-shadow: 0 10px 26px rgba(13,110,253,.13);
+      font-size: 34px;
+      margin-bottom: 16px;
     }
 
-    .dropzone strong { font-size: 1.05rem; }
-    .dropzone span { color: var(--muted); margin-top: 6px; font-size: .9rem; }
+    .dropzone h2 { margin: 0 0 7px; font-size: 21px; }
+    .dropzone p { margin: 0; color: var(--muted); }
+    .dropzone small { margin-top: 13px; color: #83909b; }
+    input[type="file"] { display: none; }
 
-    .file-input { display: none; }
-
-    .selected-file {
-      margin-top: 16px;
+    .file-panel {
       display: none;
+      margin-top: 20px;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      padding: 16px;
       align-items: center;
       justify-content: space-between;
-      gap: 14px;
-      padding: 13px 15px;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: #fff;
+      gap: 16px;
+      background: #fbfdff;
     }
 
-    .selected-file.show { display: flex; }
-    .file-info { min-width: 0; }
-    .file-name { font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .file-size { color: var(--muted); font-size: .82rem; margin-top: 3px; }
+    .file-panel.show { display: flex; }
+    .file-meta { min-width: 0; }
+    .file-name { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-size { margin-top: 3px; color: var(--muted); font-size: 13px; }
 
-    .remove-file {
+    .remove-btn {
       border: 0;
-      background: #fdecec;
-      color: var(--danger);
-      border-radius: 9px;
-      padding: 8px 10px;
-      cursor: pointer;
+      background: #fff0f0;
+      color: var(--red);
+      border-radius: 11px;
+      padding: 10px 13px;
       font-weight: 700;
+      cursor: pointer;
     }
 
-    .actions {
+    .options-title {
+      margin: 26px 0 12px;
+      font-size: 16px;
+      color: var(--navy);
+    }
+
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .action-card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 19px;
+      background: #fff;
       display: flex;
-      gap: 12px;
-      margin-top: 18px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      min-height: 205px;
     }
 
-    .btn {
+    .action-card h3 { margin: 0 0 7px; font-size: 18px; }
+    .action-card p { margin: 0; color: var(--muted); line-height: 1.5; font-size: 14px; }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin: 14px 0 18px;
+    }
+
+    .chip {
+      border-radius: 999px;
+      padding: 6px 9px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #f2f6fa;
+      color: #4f6070;
+    }
+
+    .action-btn {
+      margin-top: auto;
+      min-height: 50px;
       border: 0;
-      border-radius: 12px;
-      padding: 13px 18px;
+      border-radius: 14px;
+      color: #fff;
+      font-size: 15px;
       font-weight: 800;
       cursor: pointer;
-      transition: .18s ease;
+      transition: .2s ease;
     }
 
-    .btn-primary {
-      flex: 1;
-      min-width: 220px;
-      color: #fff;
-      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-      box-shadow: 0 10px 18px rgba(139, 30, 45, .20);
-    }
-
-    .btn-primary:hover:not(:disabled) { transform: translateY(-1px); }
-    .btn-primary:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+    .action-btn:hover:not(:disabled) { transform: translateY(-1px); }
+    .action-btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+    .btn-fill { background: linear-gradient(90deg, var(--blue), var(--blue-dark)); box-shadow: 0 10px 22px rgba(13,110,253,.20); }
+    .btn-layout { background: linear-gradient(90deg, var(--wine), var(--wine-dark)); box-shadow: 0 10px 22px rgba(139,30,45,.18); }
 
     .status {
       display: none;
-      margin-top: 18px;
-      padding: 14px 16px;
-      border-radius: 12px;
+      margin-top: 20px;
+      border-radius: 15px;
+      padding: 15px 17px;
+      font-size: 14px;
       line-height: 1.45;
-      font-size: .92rem;
     }
 
     .status.show { display: block; }
-    .status.info { background: #eef4ff; color: #294f8f; }
-    .status.success { background: #e9f8ef; color: var(--success); }
-    .status.error { background: #fff0ef; color: var(--danger); }
+    .status.info { background: #eef6ff; color: #155a9c; border: 1px solid #cce2fa; }
+    .status.success { background: #effaf4; color: #146d3f; border: 1px solid #cbead9; }
+    .status.error { background: #fff1f1; color: #a62929; border: 1px solid #f3cccc; }
 
-    .side-card {
-      padding: 26px;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-
-    .side-title { margin: 0; font-size: 1.05rem; }
-
-    .steps { display: grid; gap: 14px; }
-
-    .step {
-      display: grid;
-      grid-template-columns: 36px 1fr;
+    .summary {
+      display: none;
+      grid-template-columns: repeat(3, 1fr);
       gap: 12px;
-      align-items: start;
+      margin-top: 18px;
     }
 
-    .step-number {
-      width: 36px;
-      height: 36px;
-      display: grid;
-      place-items: center;
-      border-radius: 11px;
-      color: var(--primary);
-      background: #f8e9ec;
-      font-weight: 850;
+    .summary.show { display: grid; }
+    .metric {
+      padding: 16px;
+      border-radius: 15px;
+      background: #f8fbfe;
+      border: 1px solid var(--line);
     }
+    .metric b { display: block; font-size: 24px; color: var(--navy); }
+    .metric span { font-size: 13px; color: var(--muted); }
 
-    .step strong { display: block; margin-bottom: 4px; }
-    .step p { margin: 0; color: var(--muted); font-size: .87rem; line-height: 1.45; }
-
-    .divider { height: 1px; background: var(--border); }
-
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    .summary-item {
-      padding: 14px;
-      border-radius: 12px;
-      background: var(--surface-soft);
-      border: 1px solid var(--border);
-    }
-
-    .summary-item span { display: block; color: var(--muted); font-size: .78rem; }
-    .summary-item strong { display: block; margin-top: 6px; font-size: 1.15rem; }
-
-    .privacy-note {
-      display: flex;
-      gap: 10px;
-      padding: 13px;
-      border-radius: 12px;
-      background: #fff9e8;
-      color: #715711;
-      font-size: .84rem;
-      line-height: 1.45;
-    }
-
-    .footer {
-      margin-top: 22px;
-      text-align: center;
+    .footer-note {
+      padding: 17px 30px;
+      border-top: 1px solid var(--line);
+      background: #f8fbfe;
       color: var(--muted);
-      font-size: .8rem;
+      font-size: 13px;
+      text-align: center;
     }
 
-    @media (max-width: 820px) {
-      .hero { grid-template-columns: 1fr; }
-      .side-card { order: 2; }
-    }
-
-    @media (max-width: 520px) {
-      .app-shell { width: min(100% - 20px, 1080px); padding-top: 20px; }
-      .main-card, .side-card { padding: 20px; }
-      .dropzone { min-height: 205px; padding: 20px; }
-      .summary-grid { grid-template-columns: 1fr; }
+    @media (max-width: 780px) {
+      .page { margin: 24px auto; }
+      .hero { align-items: flex-start; flex-direction: column; }
+      .badge { align-self: flex-start; }
+      .card-body { padding: 20px; }
+      .action-grid, .summary.show { grid-template-columns: 1fr; }
+      .file-panel { align-items: flex-start; }
     }
   </style>
 </head>
 <body>
-  <main class="app-shell">
-    <header class="topbar">
-      <div class="logo">DC</div>
+  <div class="topline"></div>
+
+  <main class="page">
+    <header class="hero">
       <div class="brand">
-        <h1>Débitos Copastur</h1>
-        <p>Cartão Aéreo • Bradesco</p>
+        <div class="logo">DC</div>
+        <div>
+          <h1>Débitos Copastur</h1>
+          <p class="subtitle">Cartão Aéreo • Bradesco</p>
+        </div>
       </div>
+      <div class="badge">Processamento local e seguro</div>
     </header>
 
-    <section class="hero">
-      <article class="card main-card">
-        <div class="eyebrow">Conversor automático</div>
-        <h2>Organize sua planilha em poucos cliques.</h2>
-        <p class="intro">
-          Envie o arquivo Excel. O sistema remove as colunas desnecessárias, organiza os registros e cria um arquivo separado para cada data de emissão.
-        </p>
-
-        <label class="dropzone" id="dropzone" tabindex="0" for="fileInput">
-          <div class="upload-icon">⇧</div>
-          <strong>Arraste a planilha aqui</strong>
-          <span>ou clique para selecionar um arquivo .xlsx, .xls ou .csv</span>
+    <section class="card">
+      <div class="card-body">
+        <label class="dropzone" id="dropzone" for="fileInput" tabindex="0">
+          <div class="drop-icon">⇧</div>
+          <h2>Selecione ou arraste o arquivo</h2>
+          <p>Depois escolha qual versão deseja exportar.</p>
+          <small>Formatos aceitos: XLSX, XLS e CSV</small>
         </label>
-        <input class="file-input" id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
+        <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
 
-        <div class="selected-file" id="selectedFile">
-          <div class="file-info">
+        <div class="file-panel" id="filePanel">
+          <div class="file-meta">
             <div class="file-name" id="fileName"></div>
             <div class="file-size" id="fileSize"></div>
           </div>
-          <button class="remove-file" id="removeFile" type="button">Remover</button>
+          <button class="remove-btn" id="removeBtn" type="button">Remover</button>
         </div>
 
-        <div class="actions">
-          <button class="btn btn-primary" id="convertButton" type="button" disabled>
-            Converter e baixar arquivos
-          </button>
-        </div>
+        <h2 class="options-title">Escolha o tipo de exportação</h2>
 
-        <div class="status" id="status" role="status" aria-live="polite"></div>
-      </article>
-
-      <aside class="card side-card">
-        <div>
-          <h3 class="side-title">Como funciona</h3>
-        </div>
-
-        <div class="steps">
-          <div class="step">
-            <div class="step-number">1</div>
-            <div>
-              <strong>Envie o Excel</strong>
-              <p>O processamento acontece diretamente no seu navegador.</p>
+        <div class="action-grid">
+          <article class="action-card">
+            <h3>Arquivo preenchido</h3>
+            <p>Completa automaticamente as colunas padrão do layout de débito.</p>
+            <div class="chips">
+              <span class="chip">Ticket 1234567891</span>
+              <span class="chip">Datas 14/07/26</span>
+              <span class="chip">Tipo Débito</span>
             </div>
-          </div>
-          <div class="step">
-            <div class="step-number">2</div>
-            <div>
-              <strong>Limpeza automática</strong>
-              <p>As colunas configuradas são excluídas e os dados são separados por emissão.</p>
+            <button class="action-btn btn-fill" id="fillButton" type="button" disabled>
+              Exportar arquivo preenchido
+            </button>
+          </article>
+
+          <article class="action-card">
+            <h3>Layout para outras áreas</h3>
+            <p>Remove as colunas desnecessárias e gera um único arquivo Excel, sem separar por data de emissão.</p>
+            <div class="chips">
+              <span class="chip">Remove 24 colunas</span>
+              <span class="chip">Mantém todos os dias</span>
+              <span class="chip">Arquivo único</span>
             </div>
-          </div>
-          <div class="step">
-            <div class="step-number">3</div>
-            <div>
-              <strong>Download em ZIP</strong>
-              <p>Você recebe uma pasta compactada com um Excel para cada dia.</p>
-            </div>
-          </div>
+            <button class="action-btn btn-layout" id="layoutButton" type="button" disabled>
+              Exportar layout para áreas
+            </button>
+          </article>
         </div>
 
-        <div class="divider"></div>
+        <div class="status" id="status"></div>
 
-        <div class="summary-grid">
-          <div class="summary-item">
-            <span>Linhas lidas</span>
-            <strong id="rowsRead">—</strong>
-          </div>
-          <div class="summary-item">
-            <span>Arquivos gerados</span>
-            <strong id="filesGenerated">—</strong>
-          </div>
-          <div class="summary-item">
-            <span>Colunas removidas</span>
-            <strong id="columnsRemoved">—</strong>
-          </div>
-          <div class="summary-item">
-            <span>Linhas sem data</span>
-            <strong id="rowsWithoutDate">—</strong>
-          </div>
+        <div class="summary" id="summary">
+          <div class="metric"><b id="rowsMetric">0</b><span>linhas processadas</span></div>
+          <div class="metric"><b id="colsMetric">0</b><span>colunas tratadas</span></div>
+          <div class="metric"><b id="sheetsMetric">0</b><span>planilhas processadas</span></div>
         </div>
+      </div>
 
-        <div class="privacy-note">
-          <span>🔒</span>
-          <span>Nenhum arquivo é enviado para servidor. Todo o tratamento é feito localmente no computador.</span>
-        </div>
-      </aside>
+      <div class="footer-note">
+        O arquivo é processado diretamente no navegador e não é enviado para nenhum servidor.
+      </div>
     </section>
-
-    <div class="footer">Conversor de relatórios • uso interno</div>
   </main>
 
   <script>
-    const COLUMNS_TO_REMOVE = [
-      "Aging Venda",
-      "Aging Corte",
-      "Ticket",
-      "Débito/Fee",
-      "Desconto/Rebate",
-      "Centro de Custo",
-      "Data Ida",
-      "Data Volta",
-      "Passageiro",
-      "Trecho Voado",
-      "Classe",
-      "Departamento",
-      "Matricula",
-      "Matrícula",
-      "Requisição",
-      "Solicitante",
-      "Aprovador",
-      "Localizador",
-      "Livre 1",
-      "Livre 2",
-      "Livre 3",
-      "Empresa Empregado",
-      "Taxa de Embarque",
-      "Taxa de Repasse",
-      "Tipo"
+    const fileInput = document.getElementById('fileInput');
+    const dropzone = document.getElementById('dropzone');
+    const filePanel = document.getElementById('filePanel');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const removeBtn = document.getElementById('removeBtn');
+    const fillButton = document.getElementById('fillButton');
+    const layoutButton = document.getElementById('layoutButton');
+    const statusBox = document.getElementById('status');
+    const summary = document.getElementById('summary');
+
+    let selectedFile = null;
+
+    const standardValues = {
+      'Ticket': { value: '1234567891', type: 's' },
+      'Débito/Fee': { value: 0, type: 'n', format: '#,##0.00' },
+      'Desconto/Rebate': { value: 0, type: 'n', format: '#,##0' },
+      'Centro de Custo': { value: 'DEBITO COPASTUR', type: 's' },
+      'Data Ida': { value: new Date(2026, 6, 14), type: 'd', format: 'dd/mm/yy' },
+      'Data Volta': { value: new Date(2026, 6, 14), type: 'd', format: 'dd/mm/yy' },
+      'Passageiro': { value: 'DEBITO COPASTUR', type: 's' },
+      'Trecho Voado': { value: 'DEBITO COPASTUR', type: 's' },
+      'Classe': { value: 'Y', type: 's' },
+      'Departamento': { value: 'DEBITO COPASTUR', type: 's' },
+      'Matricula': { value: 'DEBITO COPASTUR', type: 's' },
+      'Requisição': { value: 'DEBITO COPASTUR', type: 's' },
+      'Solicitante': { value: 'DEBITO COPASTUR', type: 's' },
+      'Aprovador': { value: 'DEBITO COPASTUR', type: 's' },
+      'Localizador': { value: 'DEBITO COPASTUR', type: 's' },
+      'Livre 1': { value: '', type: 's' },
+      'Livre 2': { value: '', type: 's' },
+      'Livre 3': { value: '', type: 's' },
+      'Empresa Empregado': { value: '', type: 's' },
+      'Taxa de Embarque': { value: 0, type: 'n', format: '#,##0.00' },
+      'Taxa de Repasse': { value: 0, type: 'n', format: '#,##0.00' },
+      'Tipo': { value: 'Débito', type: 's' }
+    };
+
+    const columnsToRemove = [
+      'Aging Venda', 'Aging Corte', 'Ticket', 'Débito/Fee', 'Desconto/Rebate',
+      'Centro de Custo', 'Data Ida', 'Data Volta', 'Passageiro', 'Trecho Voado',
+      'Classe', 'Departamento', 'Matricula', 'Matrícula', 'Requisição',
+      'Solicitante', 'Aprovador', 'Localizador', 'Livre 1', 'Livre 2', 'Livre 3',
+      'Empresa Empregado', 'Taxa de Embarque', 'Taxa de Repasse', 'Tipo'
     ];
 
-    const DATE_COLUMN_ALIASES = [
-      "Data de Emissão",
-      "Data Emissão",
-      "Data da Emissão",
-      "Data Emissao",
-      "Emissão",
-      "Emissao"
-    ];
-
-    const dropzone = document.getElementById("dropzone");
-    const fileInput = document.getElementById("fileInput");
-    const selectedFile = document.getElementById("selectedFile");
-    const fileName = document.getElementById("fileName");
-    const fileSize = document.getElementById("fileSize");
-    const removeFileButton = document.getElementById("removeFile");
-    const convertButton = document.getElementById("convertButton");
-    const statusBox = document.getElementById("status");
-
-    let currentFile = null;
-
-    function normalizeText(value) {
-      return String(value ?? "")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/\s+/g, " ")
+    function normalize(value) {
+      return String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
         .trim()
         .toLowerCase();
     }
 
-    function formatBytes(bytes) {
-      if (!bytes) return "0 KB";
-      const units = ["B", "KB", "MB", "GB"];
-      const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-      return `${(bytes / Math.pow(1024, index)).toFixed(index ? 1 : 0)} ${units[index]}`;
-    }
+    const normalizedStandards = new Map(
+      Object.entries(standardValues).map(([key, config]) => [normalize(key), { original: key, ...config }])
+    );
+    const normalizedRemove = new Set(columnsToRemove.map(normalize));
 
-    function setStatus(message, type = "info") {
+    function setStatus(message, type = 'info') {
       statusBox.className = `status show ${type}`;
       statusBox.textContent = message;
     }
 
     function clearStatus() {
-      statusBox.className = "status";
-      statusBox.textContent = "";
+      statusBox.className = 'status';
+      statusBox.textContent = '';
     }
 
-    function resetSummary() {
-      document.getElementById("rowsRead").textContent = "—";
-      document.getElementById("filesGenerated").textContent = "—";
-      document.getElementById("columnsRemoved").textContent = "—";
-      document.getElementById("rowsWithoutDate").textContent = "—";
+    function humanSize(bytes) {
+      if (bytes < 1024) return `${bytes} bytes`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+    }
+
+    function safeBaseName(name) {
+      return name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9À-ÿ_-]+/g, '_').replace(/^_+|_+$/g, '') || 'arquivo';
     }
 
     function selectFile(file) {
       if (!file) return;
-      const allowed = /\.(xlsx|xls|csv)$/i;
-      if (!allowed.test(file.name)) {
-        setStatus("Selecione um arquivo Excel (.xlsx ou .xls) ou CSV.", "error");
+      if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
+        setStatus('Selecione um arquivo Excel ou CSV válido.', 'error');
         return;
       }
 
-      currentFile = file;
+      selectedFile = file;
       fileName.textContent = file.name;
-      fileSize.textContent = formatBytes(file.size);
-      selectedFile.classList.add("show");
-      convertButton.disabled = false;
+      fileSize.textContent = humanSize(file.size);
+      filePanel.classList.add('show');
+      fillButton.disabled = false;
+      layoutButton.disabled = false;
+      summary.classList.remove('show');
       clearStatus();
-      resetSummary();
     }
 
-    function clearFile() {
-      currentFile = null;
-      fileInput.value = "";
-      selectedFile.classList.remove("show");
-      convertButton.disabled = true;
+    function resetFile() {
+      selectedFile = null;
+      fileInput.value = '';
+      filePanel.classList.remove('show');
+      fillButton.disabled = true;
+      layoutButton.disabled = true;
+      summary.classList.remove('show');
       clearStatus();
-      resetSummary();
     }
 
-    function parseDateValue(value) {
-      if (value === null || value === undefined || value === "") return null;
-
-      if (value instanceof Date && !Number.isNaN(value.getTime())) {
-        return {
-          year: value.getFullYear(),
-          month: value.getMonth() + 1,
-          day: value.getDate()
-        };
+    function findHeaderRow(matrix) {
+      const scanLimit = Math.min(matrix.length, 50);
+      for (let r = 0; r < scanLimit; r++) {
+        const row = matrix[r] || [];
+        let standardMatches = 0;
+        let knownMatches = 0;
+        row.forEach(value => {
+          const key = normalize(value);
+          if (normalizedStandards.has(key)) standardMatches++;
+          if (normalizedRemove.has(key) || key === normalize('Data de Emissão')) knownMatches++;
+        });
+        if (standardMatches >= 3 || knownMatches >= 5) return r;
       }
+      return -1;
+    }
 
-      if (typeof value === "number" && Number.isFinite(value)) {
-        const parsed = XLSX.SSF.parse_date_code(value);
-        if (parsed && parsed.y && parsed.m && parsed.d) {
-          return { year: parsed.y, month: parsed.m, day: parsed.d };
+    function rowHasData(row) {
+      return (row || []).some(value => String(value ?? '').trim() !== '');
+    }
+
+    function updateSummary(rows, cols, sheets) {
+      document.getElementById('rowsMetric').textContent = rows.toLocaleString('pt-BR');
+      document.getElementById('colsMetric').textContent = cols.toLocaleString('pt-BR');
+      document.getElementById('sheetsMetric').textContent = sheets.toLocaleString('pt-BR');
+      summary.classList.add('show');
+    }
+
+    function setColumnWidths(sheet, matrix) {
+      const maxCols = Math.max(...matrix.map(row => row.length), 0);
+      sheet['!cols'] = Array.from({ length: maxCols }, (_, c) => {
+        let max = 10;
+        for (let r = 0; r < Math.min(matrix.length, 500); r++) {
+          max = Math.max(max, String(matrix[r]?.[c] ?? '').length + 2);
         }
-      }
-
-      const raw = String(value).trim();
-      if (!raw) return null;
-
-      let match = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
-      if (match) {
-        let year = Number(match[3]);
-        if (year < 100) year += 2000;
-        return { day: Number(match[1]), month: Number(match[2]), year };
-      }
-
-      match = raw.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
-      if (match) {
-        return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
-      }
-
-      return null;
-    }
-
-    function isValidDateParts(parts) {
-      if (!parts) return false;
-      const date = new Date(parts.year, parts.month - 1, parts.day);
-      return date.getFullYear() === parts.year &&
-        date.getMonth() === parts.month - 1 &&
-        date.getDate() === parts.day;
-    }
-
-    function dateKey(parts) {
-      const y = String(parts.year).padStart(4, "0");
-      const m = String(parts.month).padStart(2, "0");
-      const d = String(parts.day).padStart(2, "0");
-      return `${y}-${m}-${d}`;
-    }
-
-    function displayDate(parts) {
-      return `${String(parts.day).padStart(2, "0")}/${String(parts.month).padStart(2, "0")}/${parts.year}`;
-    }
-
-    function safeBaseName(name) {
-      return name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9À-ÿ_-]+/g, "_").replace(/^_+|_+$/g, "");
-    }
-
-    function applyBasicColumnWidths(worksheet, rows, headers) {
-      const widths = headers.map((header) => {
-        let maxLength = String(header ?? "").length;
-        for (const row of rows.slice(0, 500)) {
-          const value = row[header];
-          maxLength = Math.max(maxLength, String(value ?? "").length);
-        }
-        return { wch: Math.min(Math.max(maxLength + 2, 10), 42) };
+        return { wch: Math.min(max, 42) };
       });
-      worksheet["!cols"] = widths;
-      worksheet["!autofilter"] = { ref: worksheet["!ref"] };
-      worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
     }
 
-    async function convertWorkbook() {
-      if (!currentFile) return;
+    async function readWorkbook() {
+      const buffer = await selectedFile.arrayBuffer();
+      return XLSX.read(buffer, { type: 'array', cellDates: true, raw: true });
+    }
 
-      convertButton.disabled = true;
-      convertButton.textContent = "Processando...";
-      setStatus("Lendo e organizando a planilha...", "info");
-      resetSummary();
+    async function exportFilled() {
+      if (!selectedFile) return;
+      fillButton.disabled = true;
+      layoutButton.disabled = true;
+      summary.classList.remove('show');
+      setStatus('Preenchendo as colunas padrão...', 'info');
 
       try {
-        const buffer = await currentFile.arrayBuffer();
-        const workbook = XLSX.read(buffer, { type: "array", cellDates: true, raw: true });
+        const workbook = await readWorkbook();
+        let totalRows = 0;
+        let totalSheets = 0;
+        const standardizedHeaders = new Set();
 
-        if (!workbook.SheetNames.length) {
-          throw new Error("A planilha não possui abas válidas.");
-        }
+        workbook.SheetNames.forEach(sheetName => {
+          const sheet = workbook.Sheets[sheetName];
+          if (!sheet?.['!ref']) return;
 
-        let sourceSheet = null;
-        let sourceSheetName = "";
-        let matrix = [];
-        let headerRowIndex = -1;
+          const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: true });
+          const headerRow = findHeaderRow(matrix);
+          if (headerRow < 0) return;
 
-        const normalizedDateAliases = DATE_COLUMN_ALIASES.map(normalizeText);
-
-        for (const sheetName of workbook.SheetNames) {
-          const candidate = workbook.Sheets[sheetName];
-          const candidateMatrix = XLSX.utils.sheet_to_json(candidate, {
-            header: 1,
-            defval: "",
-            raw: true,
-            blankrows: false
-          });
-
-          const scanLimit = Math.min(candidateMatrix.length, 30);
-          let candidateHeaderIndex = -1;
-
-          for (let rowIndex = 0; rowIndex < scanLimit; rowIndex++) {
-            const normalizedRow = candidateMatrix[rowIndex].map(normalizeText);
-            if (normalizedRow.some((value) => normalizedDateAliases.includes(value))) {
-              candidateHeaderIndex = rowIndex;
-              break;
+          const headers = matrix[headerRow] || [];
+          const targets = [];
+          headers.forEach((header, c) => {
+            const config = normalizedStandards.get(normalize(header));
+            if (config) {
+              targets.push({ c, config });
+              standardizedHeaders.add(normalize(header));
             }
+          });
+          if (!targets.length) return;
+
+          let sheetRows = 0;
+          for (let r = headerRow + 1; r < matrix.length; r++) {
+            if (!rowHasData(matrix[r])) continue;
+            targets.forEach(({ c, config }) => {
+              matrix[r][c] = config.value;
+            });
+            sheetRows++;
           }
 
-          if (candidateHeaderIndex >= 0 && candidateMatrix.length > candidateHeaderIndex + 1) {
-            sourceSheet = candidate;
-            sourceSheetName = sheetName;
-            matrix = candidateMatrix;
-            headerRowIndex = candidateHeaderIndex;
-            break;
+          const newSheet = XLSX.utils.aoa_to_sheet(matrix, { cellDates: true });
+          targets.forEach(({ c, config }) => {
+            for (let r = headerRow + 1; r < matrix.length; r++) {
+              if (!rowHasData(matrix[r])) continue;
+              const address = XLSX.utils.encode_cell({ r, c });
+              if (!newSheet[address]) continue;
+              newSheet[address].t = config.type;
+              if (config.format) newSheet[address].z = config.format;
+            }
+          });
+          setColumnWidths(newSheet, matrix);
+          workbook.Sheets[sheetName] = newSheet;
+
+          if (sheetRows > 0) {
+            totalRows += sheetRows;
+            totalSheets++;
           }
-        }
-
-        if (!sourceSheet || headerRowIndex < 0) {
-          throw new Error("Não encontrei uma aba com a coluna Data de Emissão.");
-        }
-
-        const rawHeaders = matrix[headerRowIndex].map((header, index) => {
-          const clean = String(header ?? "").trim();
-          return clean || `Coluna ${index + 1}`;
         });
 
-        const normalizedHeaders = rawHeaders.map(normalizeText);
-        const dateColumnIndex = normalizedHeaders.findIndex((header) => normalizedDateAliases.includes(header));
-
-        if (dateColumnIndex === -1) {
-          throw new Error(`Não encontrei a coluna de data de emissão. Cabeçalhos encontrados: ${rawHeaders.join(", ")}`);
+        if (!totalSheets) {
+          throw new Error('Não encontrei uma aba com os cabeçalhos esperados, como Ticket, Centro de Custo e Tipo.');
         }
 
-        const columnsToRemoveNormalized = new Set(COLUMNS_TO_REMOVE.map(normalizeText));
-        const keepIndexes = rawHeaders
-          .map((header, index) => ({ header, index }))
-          .filter(({ header, index }) => index === dateColumnIndex || !columnsToRemoveNormalized.has(normalizeText(header)))
-          .map(({ index }) => index);
-
-        const keptHeaders = keepIndexes.map((index) => rawHeaders[index]);
-        const removedCount = rawHeaders.length - keptHeaders.length;
-        const groups = new Map();
-        const rowsWithoutDate = [];
-
-        for (let rowIndex = headerRowIndex + 1; rowIndex < matrix.length; rowIndex++) {
-          const row = matrix[rowIndex];
-          const hasContent = row.some((cell) => String(cell ?? "").trim() !== "");
-          if (!hasContent) continue;
-
-          const parts = parseDateValue(row[dateColumnIndex]);
-          const cleanRow = {};
-          keepIndexes.forEach((columnIndex, outputIndex) => {
-            cleanRow[keptHeaders[outputIndex]] = row[columnIndex] ?? "";
-          });
-
-          if (!isValidDateParts(parts)) {
-            rowsWithoutDate.push(cleanRow);
-            continue;
-          }
-
-          const key = dateKey(parts);
-          if (!groups.has(key)) {
-            groups.set(key, { parts, rows: [] });
-          }
-          groups.get(key).rows.push(cleanRow);
-        }
-
-        if (!groups.size) {
-          throw new Error("Nenhuma linha possui uma data de emissão válida.");
-        }
-
-        const sortedGroups = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
-        const zip = new JSZip();
-        const baseName = safeBaseName(currentFile.name) || "planilha";
-
-        for (const [key, group] of sortedGroups) {
-          const outputWorkbook = XLSX.utils.book_new();
-          const outputSheet = XLSX.utils.json_to_sheet(group.rows, { header: keptHeaders });
-
-          applyBasicColumnWidths(outputSheet, group.rows, keptHeaders);
-
-          const dateHeader = rawHeaders[dateColumnIndex];
-          const dateOutputColumnIndex = keptHeaders.findIndex((header) => header === dateHeader);
-          if (dateOutputColumnIndex >= 0) {
-            const range = XLSX.utils.decode_range(outputSheet["!ref"]);
-            for (let r = 1; r <= range.e.r; r++) {
-              const address = XLSX.utils.encode_cell({ r, c: dateOutputColumnIndex });
-              if (outputSheet[address]) {
-                outputSheet[address].v = displayDate(group.parts);
-                outputSheet[address].t = "s";
-              }
-            }
-          }
-
-          XLSX.utils.book_append_sheet(outputWorkbook, outputSheet, "Dados");
-          const output = XLSX.write(outputWorkbook, { bookType: "xlsx", type: "array", compression: true });
-          const fileDate = `${String(group.parts.day).padStart(2, "0")}-${String(group.parts.month).padStart(2, "0")}-${group.parts.year}`;
-          zip.file(`${baseName}_${fileDate}.xlsx`, output);
-        }
-
-        if (rowsWithoutDate.length) {
-          const reviewWorkbook = XLSX.utils.book_new();
-          const reviewSheet = XLSX.utils.json_to_sheet(rowsWithoutDate, { header: keptHeaders });
-          applyBasicColumnWidths(reviewSheet, rowsWithoutDate, keptHeaders);
-          XLSX.utils.book_append_sheet(reviewWorkbook, reviewSheet, "Sem data válida");
-          const reviewOutput = XLSX.write(reviewWorkbook, { bookType: "xlsx", type: "array", compression: true });
-          zip.file(`${baseName}_LINHAS_SEM_DATA.xlsx`, reviewOutput);
-        }
-
-        const zipBlob = await zip.generateAsync({
-          type: "blob",
-          compression: "DEFLATE",
-          compressionOptions: { level: 6 }
-        });
-
-        saveAs(zipBlob, `${baseName}_separado_por_data.zip`);
-
-        const validRows = sortedGroups.reduce((sum, [, group]) => sum + group.rows.length, 0);
-        document.getElementById("rowsRead").textContent = (validRows + rowsWithoutDate.length).toLocaleString("pt-BR");
-        document.getElementById("filesGenerated").textContent = sortedGroups.length.toLocaleString("pt-BR");
-        document.getElementById("columnsRemoved").textContent = removedCount.toLocaleString("pt-BR");
-        document.getElementById("rowsWithoutDate").textContent = rowsWithoutDate.length.toLocaleString("pt-BR");
-
-        const extra = rowsWithoutDate.length
-          ? ` ${rowsWithoutDate.length} linha(s) sem data válida foram colocadas em um arquivo separado para conferência.`
-          : "";
-        setStatus(`Conversão concluída. ${sortedGroups.length} arquivo(s) criado(s) a partir da aba “${sourceSheetName}”.${extra}`, "success");
+        const base = safeBaseName(selectedFile.name);
+        XLSX.writeFile(workbook, `${base}_PREENCHIDO.xlsx`, { bookType: 'xlsx', cellDates: true, compression: true });
+        updateSummary(totalRows, standardizedHeaders.size, totalSheets);
+        setStatus('Arquivo preenchido com sucesso. O download foi iniciado.', 'success');
       } catch (error) {
         console.error(error);
-        setStatus(error.message || "Não foi possível processar o arquivo.", "error");
+        setStatus(error.message || 'Não foi possível preencher o arquivo.', 'error');
       } finally {
-        convertButton.disabled = !currentFile;
-        convertButton.textContent = "Converter e baixar arquivos";
+        fillButton.disabled = !selectedFile;
+        layoutButton.disabled = !selectedFile;
       }
     }
 
-    fileInput.addEventListener("change", (event) => selectFile(event.target.files[0]));
-    removeFileButton.addEventListener("click", clearFile);
-    convertButton.addEventListener("click", convertWorkbook);
+    async function exportLayout() {
+      if (!selectedFile) return;
+      fillButton.disabled = true;
+      layoutButton.disabled = true;
+      summary.classList.remove('show');
+      setStatus('Removendo as colunas e gerando o layout para as áreas...', 'info');
 
-    ["dragenter", "dragover"].forEach((eventName) => {
-      dropzone.addEventListener(eventName, (event) => {
+      try {
+        const sourceWorkbook = await readWorkbook();
+        const outputWorkbook = XLSX.utils.book_new();
+        let totalRows = 0;
+        let totalSheets = 0;
+        let removedColumns = 0;
+
+        sourceWorkbook.SheetNames.forEach(sheetName => {
+          const sheet = sourceWorkbook.Sheets[sheetName];
+          if (!sheet?.['!ref']) return;
+
+          const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: true });
+          const headerRow = findHeaderRow(matrix);
+          if (headerRow < 0) return;
+
+          const headers = matrix[headerRow] || [];
+          const keepIndexes = headers
+            .map((header, index) => ({ header, index }))
+            .filter(({ header }) => !normalizedRemove.has(normalize(header)))
+            .map(({ index }) => index);
+
+          const removedOnSheet = headers.length - keepIndexes.length;
+          if (removedOnSheet <= 0) return;
+
+          const cleanedMatrix = matrix.map(row => keepIndexes.map(index => row?.[index] ?? ''));
+          const newSheet = XLSX.utils.aoa_to_sheet(cleanedMatrix, { cellDates: true });
+          setColumnWidths(newSheet, cleanedMatrix);
+          XLSX.utils.book_append_sheet(outputWorkbook, newSheet, sheetName.substring(0, 31));
+
+          const dataRows = cleanedMatrix.slice(headerRow + 1).filter(rowHasData).length;
+          totalRows += dataRows;
+          totalSheets++;
+          removedColumns = Math.max(removedColumns, removedOnSheet);
+        });
+
+        if (!totalSheets) {
+          throw new Error('Não encontrei uma aba com as colunas configuradas para remoção.');
+        }
+
+        const base = safeBaseName(selectedFile.name);
+        XLSX.writeFile(outputWorkbook, `${base}_LAYOUT_AREAS.xlsx`, { bookType: 'xlsx', cellDates: true, compression: true });
+        updateSummary(totalRows, removedColumns, totalSheets);
+        setStatus('Layout para as outras áreas gerado com sucesso em um único arquivo Excel.', 'success');
+      } catch (error) {
+        console.error(error);
+        setStatus(error.message || 'Não foi possível gerar o layout para as áreas.', 'error');
+      } finally {
+        fillButton.disabled = !selectedFile;
+        layoutButton.disabled = !selectedFile;
+      }
+    }
+
+    fileInput.addEventListener('change', event => selectFile(event.target.files?.[0]));
+    removeBtn.addEventListener('click', resetFile);
+    fillButton.addEventListener('click', exportFilled);
+    layoutButton.addEventListener('click', exportLayout);
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropzone.addEventListener(eventName, event => {
         event.preventDefault();
-        dropzone.classList.add("dragover");
+        dropzone.classList.add('dragover');
       });
     });
 
-    ["dragleave", "drop"].forEach((eventName) => {
-      dropzone.addEventListener(eventName, (event) => {
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropzone.addEventListener(eventName, event => {
         event.preventDefault();
-        dropzone.classList.remove("dragover");
+        dropzone.classList.remove('dragover');
       });
     });
 
-    dropzone.addEventListener("drop", (event) => {
-      selectFile(event.dataTransfer.files[0]);
-    });
-
-    dropzone.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
+    dropzone.addEventListener('drop', event => selectFile(event.dataTransfer.files?.[0]));
+    dropzone.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         fileInput.click();
       }
