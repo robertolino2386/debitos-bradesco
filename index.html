@@ -6,6 +6,7 @@
   <title>Débitos Copastur | Conversor de Planilhas</title>
   <meta name="description" content="Preenche o layout de débitos ou remove colunas para exportação às demais áreas." />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
     :root {
       --navy: #08233f;
@@ -308,9 +309,9 @@
           <div class="drop-icon">⇧</div>
           <h2>Selecione ou arraste o arquivo</h2>
           <p>Depois escolha qual versão deseja exportar.</p>
-          <small>Formatos aceitos: XLSX, XLS e CSV</small>
+          <small>Formatos aceitos: XLSX, XLSM, XLS e CSV</small>
         </label>
-        <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
+        <input id="fileInput" type="file" accept=".xlsx,.xlsm,.xls,.csv" />
 
         <div class="file-panel" id="filePanel">
           <div class="file-meta">
@@ -448,7 +449,7 @@
 
     function selectFile(file) {
       if (!file) return;
-      if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
+      if (!/\.(xlsx|xlsm|xls|csv)$/i.test(file.name)) {
         setStatus('Selecione um arquivo Excel ou CSV válido.', 'error');
         return;
       }
@@ -516,74 +517,213 @@
       return XLSX.read(buffer, { type: 'array', cellDates: true, raw: true });
     }
 
+    function columnLettersToNumber(reference) {
+      const letters = String(reference || '').match(/[A-Z]+/i)?.[0]?.toUpperCase() || '';
+      let number = 0;
+      for (const letter of letters) number = number * 26 + letter.charCodeAt(0) - 64;
+      return number;
+    }
+
+    function columnNumberToLetters(number) {
+      let result = '';
+      while (number > 0) {
+        number--;
+        result = String.fromCharCode(65 + (number % 26)) + result;
+        number = Math.floor(number / 26);
+      }
+      return result;
+    }
+
+    function excelDateSerial(date) {
+      return (Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) - Date.UTC(1899, 11, 30)) / 86400000;
+    }
+
+    function resolveZipPath(basePath, target) {
+      if (target.startsWith('/')) return target.replace(/^\//, '');
+      const baseParts = basePath.split('/');
+      baseParts.pop();
+      for (const part of target.split('/')) {
+        if (!part || part === '.') continue;
+        if (part === '..') baseParts.pop();
+        else baseParts.push(part);
+      }
+      return baseParts.join('/');
+    }
+
+    function xmlText(node) {
+      return [...node.querySelectorAll('t')].map(item => item.textContent || '').join('');
+    }
+
+    function cellDisplayValue(cell, sharedStrings) {
+      if (!cell) return '';
+      const type = cell.getAttribute('t');
+      if (type === 'inlineStr') return xmlText(cell.querySelector('is') || cell);
+      const value = cell.querySelector('v')?.textContent ?? '';
+      if (type === 's') return sharedStrings[Number(value)] ?? '';
+      return value;
+    }
+
+    function rowContainsData(row, sharedStrings) {
+      return [...row.children].some(cell => {
+        if (cell.localName !== 'c') return false;
+        const value = cellDisplayValue(cell, sharedStrings);
+        return String(value).trim() !== '';
+      });
+    }
+
+    function findOrCreateCell(xmlDoc, row, columnNumber, rowNumber) {
+      const reference = `${columnNumberToLetters(columnNumber)}${rowNumber}`;
+      const cells = [...row.children].filter(node => node.localName === 'c');
+      let cell = cells.find(node => node.getAttribute('r') === reference);
+      if (cell) return cell;
+
+      cell = xmlDoc.createElementNS(row.namespaceURI, 'c');
+      cell.setAttribute('r', reference);
+
+      const nextCell = cells.find(node => columnLettersToNumber(node.getAttribute('r')) > columnNumber);
+      if (nextCell) row.insertBefore(cell, nextCell);
+      else row.appendChild(cell);
+      return cell;
+    }
+
+    function clearCellContent(cell) {
+      [...cell.children].forEach(child => {
+        if (['v', 'f', 'is'].includes(child.localName)) child.remove();
+      });
+    }
+
+    function setCellValue(xmlDoc, cell, config) {
+      clearCellContent(cell);
+
+      if (config.type === 'n' || config.type === 'd') {
+        cell.removeAttribute('t');
+        const valueNode = xmlDoc.createElementNS(cell.namespaceURI, 'v');
+        valueNode.textContent = String(config.type === 'd' ? excelDateSerial(config.value) : config.value);
+        cell.appendChild(valueNode);
+        return;
+      }
+
+      cell.setAttribute('t', 'inlineStr');
+      const inline = xmlDoc.createElementNS(cell.namespaceURI, 'is');
+      const text = xmlDoc.createElementNS(cell.namespaceURI, 't');
+      text.setAttribute('xml:space', 'preserve');
+      text.textContent = String(config.value ?? '');
+      inline.appendChild(text);
+      cell.appendChild(inline);
+    }
+
     async function exportFilled() {
       if (!selectedFile) return;
+      if (!/\.(xlsx|xlsm)$/i.test(selectedFile.name)) {
+        setStatus('Para manter logos, cabeçalhos e formatação exatamente iguais, use um arquivo XLSX ou XLSM.', 'error');
+        return;
+      }
+
       fillButton.disabled = true;
       layoutButton.disabled = true;
       summary.classList.remove('show');
-      setStatus('Preenchendo as colunas padrão...', 'info');
+      setStatus('Preenchendo somente as células, sem alterar o layout original...', 'info');
 
       try {
-        const workbook = await readWorkbook();
+        const buffer = await selectedFile.arrayBuffer();
+        const zip = await JSZip.loadAsync(buffer);
+        const parser = new DOMParser();
+        const serializer = new XMLSerializer();
+
+        const workbookPath = 'xl/workbook.xml';
+        const workbookRelsPath = 'xl/_rels/workbook.xml.rels';
+        const workbookXml = parser.parseFromString(await zip.file(workbookPath).async('text'), 'application/xml');
+        const workbookRelsXml = parser.parseFromString(await zip.file(workbookRelsPath).async('text'), 'application/xml');
+
+        const relationshipMap = new Map(
+          [...workbookRelsXml.getElementsByTagNameNS('*', 'Relationship')]
+            .map(rel => [rel.getAttribute('Id'), resolveZipPath(workbookPath, rel.getAttribute('Target') || '')])
+        );
+
+        let sharedStrings = [];
+        const sharedFile = zip.file('xl/sharedStrings.xml');
+        if (sharedFile) {
+          const sharedXml = parser.parseFromString(await sharedFile.async('text'), 'application/xml');
+          sharedStrings = [...sharedXml.getElementsByTagNameNS('*', 'si')].map(xmlText);
+        }
+
         let totalRows = 0;
         let totalSheets = 0;
         const standardizedHeaders = new Set();
 
-        workbook.SheetNames.forEach(sheetName => {
-          const sheet = workbook.Sheets[sheetName];
-          if (!sheet?.['!ref']) return;
+        const sheets = [...workbookXml.getElementsByTagNameNS('*', 'sheet')];
+        for (const sheetInfo of sheets) {
+          const relId = sheetInfo.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id')
+            || sheetInfo.getAttribute('r:id');
+          const sheetPath = relationshipMap.get(relId);
+          const sheetFile = sheetPath ? zip.file(sheetPath) : null;
+          if (!sheetFile) continue;
 
-          const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: true });
-          const headerRow = findHeaderRow(matrix);
-          if (headerRow < 0) return;
+          const sheetXml = parser.parseFromString(await sheetFile.async('text'), 'application/xml');
+          const rows = [...sheetXml.getElementsByTagNameNS('*', 'row')];
+          let headerRow = null;
+          let targets = [];
 
-          const headers = matrix[headerRow] || [];
-          const targets = [];
-          headers.forEach((header, c) => {
-            const config = normalizedStandards.get(normalize(header));
-            if (config) {
-              targets.push({ c, config });
-              standardizedHeaders.add(normalize(header));
+          for (const row of rows.slice(0, 50)) {
+            const candidates = [];
+            for (const cell of [...row.children].filter(node => node.localName === 'c')) {
+              const header = normalize(cellDisplayValue(cell, sharedStrings));
+              const config = normalizedStandards.get(header);
+              if (config) candidates.push({ column: columnLettersToNumber(cell.getAttribute('r')), config, header });
             }
-          });
-          if (!targets.length) return;
+            if (candidates.length >= 3) {
+              headerRow = row;
+              targets = candidates;
+              break;
+            }
+          }
 
+          if (!headerRow || !targets.length) continue;
+          targets.forEach(target => standardizedHeaders.add(target.header));
+
+          const headerNumber = Number(headerRow.getAttribute('r')) || 1;
           let sheetRows = 0;
-          for (let r = headerRow + 1; r < matrix.length; r++) {
-            if (!rowHasData(matrix[r])) continue;
-            targets.forEach(({ c, config }) => {
-              matrix[r][c] = config.value;
-            });
+          for (const row of rows) {
+            const rowNumber = Number(row.getAttribute('r')) || 0;
+            if (rowNumber <= headerNumber || !rowContainsData(row, sharedStrings)) continue;
+
+            for (const { column, config } of targets) {
+              if (config.value === '') continue;
+              const cell = findOrCreateCell(sheetXml, row, column, rowNumber);
+              setCellValue(sheetXml, cell, config);
+            }
             sheetRows++;
           }
 
-          const newSheet = XLSX.utils.aoa_to_sheet(matrix, { cellDates: true });
-          targets.forEach(({ c, config }) => {
-            for (let r = headerRow + 1; r < matrix.length; r++) {
-              if (!rowHasData(matrix[r])) continue;
-              const address = XLSX.utils.encode_cell({ r, c });
-              if (!newSheet[address]) continue;
-              newSheet[address].t = config.type;
-              if (config.format) newSheet[address].z = config.format;
-            }
-          });
-          setColumnWidths(newSheet, matrix);
-          workbook.Sheets[sheetName] = newSheet;
-
           if (sheetRows > 0) {
+            zip.file(sheetPath, serializer.serializeToString(sheetXml));
             totalRows += sheetRows;
             totalSheets++;
           }
-        });
+        }
 
         if (!totalSheets) {
           throw new Error('Não encontrei uma aba com os cabeçalhos esperados, como Ticket, Centro de Custo e Tipo.');
         }
 
+        const blob = await zip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 }
+        });
         const base = safeBaseName(selectedFile.name);
-        XLSX.writeFile(workbook, `${base}_PREENCHIDO.xlsx`, { bookType: 'xlsx', cellDates: true, compression: true });
+        const extension = selectedFile.name.toLowerCase().endsWith('.xlsm') ? 'xlsm' : 'xlsx';
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${base}_PREENCHIDO.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+
         updateSummary(totalRows, standardizedHeaders.size, totalSheets);
-        setStatus('Arquivo preenchido com sucesso. O download foi iniciado.', 'success');
+        setStatus('Arquivo preenchido com sucesso. O layout original, logos e cabeçalhos foram preservados.', 'success');
       } catch (error) {
         console.error(error);
         setStatus(error.message || 'Não foi possível preencher o arquivo.', 'error');
