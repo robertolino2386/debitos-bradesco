@@ -612,6 +612,183 @@
       cell.appendChild(inline);
     }
 
+    function nextRelationshipId(relsXml) {
+      const ids = [...relsXml.getElementsByTagNameNS('*', 'Relationship')]
+        .map(rel => rel.getAttribute('Id') || '')
+        .map(id => Number((id.match(/(\d+)$/) || [])[1]))
+        .filter(Number.isFinite);
+      return `rId${ids.length ? Math.max(...ids) + 1 : 1}`;
+    }
+
+    function nextDrawingNumber(zip) {
+      const numbers = Object.keys(zip.files)
+        .map(path => (path.match(/^xl\/drawings\/drawing(\d+)\.xml$/) || [])[1])
+        .filter(Boolean)
+        .map(Number);
+      return numbers.length ? Math.max(...numbers) + 1 : 1;
+    }
+
+    function uniqueMediaPath(zip) {
+      let index = 1;
+      let path = 'xl/media/Bradesco.png';
+      while (zip.file(path)) {
+        index++;
+        path = `xl/media/Bradesco_${index}.png`;
+      }
+      return path;
+    }
+
+    async function ensurePngContentType(zip, parser, serializer) {
+      const path = '[Content_Types].xml';
+      const file = zip.file(path);
+      if (!file) throw new Error('Estrutura XLSX inválida: [Content_Types].xml não encontrado.');
+      const xml = parser.parseFromString(await file.async('text'), 'application/xml');
+      const root = xml.documentElement;
+      const hasPng = [...xml.getElementsByTagNameNS('*', 'Default')]
+        .some(item => String(item.getAttribute('Extension')).toLowerCase() === 'png');
+      if (!hasPng) {
+        const item = xml.createElementNS(root.namespaceURI, 'Default');
+        item.setAttribute('Extension', 'png');
+        item.setAttribute('ContentType', 'image/png');
+        root.appendChild(item);
+      }
+      zip.file(path, serializer.serializeToString(xml));
+    }
+
+    async function ensureDrawingContentType(zip, drawingPath, parser, serializer) {
+      const path = '[Content_Types].xml';
+      const xml = parser.parseFromString(await zip.file(path).async('text'), 'application/xml');
+      const root = xml.documentElement;
+      const partName = `/${drawingPath}`;
+      const exists = [...xml.getElementsByTagNameNS('*', 'Override')]
+        .some(item => item.getAttribute('PartName') === partName);
+      if (!exists) {
+        const item = xml.createElementNS(root.namespaceURI, 'Override');
+        item.setAttribute('PartName', partName);
+        item.setAttribute('ContentType', 'application/vnd.openxmlformats-officedocument.drawing+xml');
+        root.appendChild(item);
+      }
+      zip.file(path, serializer.serializeToString(xml));
+    }
+
+    function worksheetRelsPath(sheetPath) {
+      const parts = sheetPath.split('/');
+      const filename = parts.pop();
+      return `${parts.join('/')}/_rels/${filename}.rels`;
+    }
+
+    function drawingRelsPath(drawingPath) {
+      const parts = drawingPath.split('/');
+      const filename = parts.pop();
+      return `${parts.join('/')}/_rels/${filename}.rels`;
+    }
+
+    async function addLogoToWorksheet(zip, sheetPath, logoBytes, parser, serializer) {
+      const sheetFile = zip.file(sheetPath);
+      if (!sheetFile) return;
+
+      const sheetXml = parser.parseFromString(await sheetFile.async('text'), 'application/xml');
+      const sheetRoot = sheetXml.documentElement;
+      const drawingElement = [...sheetXml.getElementsByTagNameNS('*', 'drawing')][0] || null;
+      const relsPath = worksheetRelsPath(sheetPath);
+      let sheetRelsXml;
+
+      if (zip.file(relsPath)) {
+        sheetRelsXml = parser.parseFromString(await zip.file(relsPath).async('text'), 'application/xml');
+      } else {
+        sheetRelsXml = parser.parseFromString(
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>',
+          'application/xml'
+        );
+      }
+
+      let drawingPath;
+      let drawingRelId;
+
+      if (drawingElement) {
+        drawingRelId = drawingElement.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id')
+          || drawingElement.getAttribute('r:id');
+        const rel = [...sheetRelsXml.getElementsByTagNameNS('*', 'Relationship')]
+          .find(item => item.getAttribute('Id') === drawingRelId);
+        if (rel) drawingPath = resolveZipPath(sheetPath, rel.getAttribute('Target') || '');
+      }
+
+      if (!drawingPath || !zip.file(drawingPath)) {
+        const number = nextDrawingNumber(zip);
+        drawingPath = `xl/drawings/drawing${number}.xml`;
+        drawingRelId = nextRelationshipId(sheetRelsXml);
+
+        const relationship = sheetRelsXml.createElementNS(sheetRelsXml.documentElement.namespaceURI, 'Relationship');
+        relationship.setAttribute('Id', drawingRelId);
+        relationship.setAttribute('Type', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing');
+        relationship.setAttribute('Target', `../drawings/drawing${number}.xml`);
+        sheetRelsXml.documentElement.appendChild(relationship);
+
+        const drawing = sheetXml.createElementNS(sheetRoot.namespaceURI, 'drawing');
+        drawing.setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:r', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships');
+        drawing.setAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'r:id', drawingRelId);
+        const extLst = [...sheetRoot.children].find(node => node.localName === 'extLst');
+        if (extLst) sheetRoot.insertBefore(drawing, extLst);
+        else sheetRoot.appendChild(drawing);
+
+        zip.file(drawingPath,
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+          '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"></xdr:wsDr>'
+        );
+        await ensureDrawingContentType(zip, drawingPath, parser, serializer);
+      }
+
+      zip.file(sheetPath, serializer.serializeToString(sheetXml));
+      zip.file(relsPath, serializer.serializeToString(sheetRelsXml));
+
+      const mediaPath = uniqueMediaPath(zip);
+      zip.file(mediaPath, logoBytes);
+      await ensurePngContentType(zip, parser, serializer);
+
+      const drawingXml = parser.parseFromString(await zip.file(drawingPath).async('text'), 'application/xml');
+      const drawingRoot = drawingXml.documentElement;
+      const dRelsPath = drawingRelsPath(drawingPath);
+      let drawingRelsXml;
+      if (zip.file(dRelsPath)) {
+        drawingRelsXml = parser.parseFromString(await zip.file(dRelsPath).async('text'), 'application/xml');
+      } else {
+        drawingRelsXml = parser.parseFromString(
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>',
+          'application/xml'
+        );
+      }
+
+      const imageRelId = nextRelationshipId(drawingRelsXml);
+      const imageRel = drawingRelsXml.createElementNS(drawingRelsXml.documentElement.namespaceURI, 'Relationship');
+      imageRel.setAttribute('Id', imageRelId);
+      imageRel.setAttribute('Type', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image');
+      imageRel.setAttribute('Target', `../media/${mediaPath.split('/').pop()}`);
+      drawingRelsXml.documentElement.appendChild(imageRel);
+
+      const existingIds = [...drawingXml.getElementsByTagNameNS('*', 'cNvPr')]
+        .map(item => Number(item.getAttribute('id')))
+        .filter(Number.isFinite);
+      const pictureId = existingIds.length ? Math.max(...existingIds) + 1 : 1;
+
+      const anchorXml = parser.parseFromString(
+        `<xdr:twoCellAnchor xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" editAs="oneCell">` +
+          `<xdr:from><xdr:col>0</xdr:col><xdr:colOff>170000</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>70000</xdr:rowOff></xdr:from>` +
+          `<xdr:to><xdr:col>2</xdr:col><xdr:colOff>150000</xdr:colOff><xdr:row>3</xdr:row><xdr:rowOff>50000</xdr:rowOff></xdr:to>` +
+          `<xdr:pic>` +
+            `<xdr:nvPicPr><xdr:cNvPr id="${pictureId}" name="Bradesco.png"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
+            `<xdr:blipFill><a:blip r:embed="${imageRelId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
+            `<xdr:spPr><a:xfrm/><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>` +
+          `</xdr:pic>` +
+          `<xdr:clientData/>` +
+        `</xdr:twoCellAnchor>`,
+        'application/xml'
+      ).documentElement;
+
+      drawingRoot.appendChild(drawingXml.importNode(anchorXml, true));
+      zip.file(drawingPath, serializer.serializeToString(drawingXml));
+      zip.file(dRelsPath, serializer.serializeToString(drawingRelsXml));
+    }
+
     async function exportFilled() {
       if (!selectedFile) return;
       if (!/\.(xlsx|xlsm)$/i.test(selectedFile.name)) {
@@ -627,6 +804,9 @@
       try {
         const buffer = await selectedFile.arrayBuffer();
         const zip = await JSZip.loadAsync(buffer);
+        const logoResponse = await fetch('Bradesco.png', { cache: 'no-store' });
+        if (!logoResponse.ok) throw new Error('Não encontrei o arquivo Bradesco.png no mesmo diretório do index.html.');
+        const logoBytes = await logoResponse.arrayBuffer();
         const parser = new DOMParser();
         const serializer = new XMLSerializer();
 
@@ -649,6 +829,7 @@
 
         let totalRows = 0;
         let totalSheets = 0;
+        const processedSheetPaths = [];
         const standardizedHeaders = new Set();
 
         const sheets = [...workbookXml.getElementsByTagNameNS('*', 'sheet')];
@@ -699,11 +880,16 @@
             zip.file(sheetPath, serializer.serializeToString(sheetXml));
             totalRows += sheetRows;
             totalSheets++;
+            processedSheetPaths.push(sheetPath);
           }
         }
 
         if (!totalSheets) {
           throw new Error('Não encontrei uma aba com os cabeçalhos esperados, como Ticket, Centro de Custo e Tipo.');
+        }
+
+        for (const sheetPath of processedSheetPaths) {
+          await addLogoToWorksheet(zip, sheetPath, logoBytes, parser, serializer);
         }
 
         const blob = await zip.generateAsync({
@@ -723,7 +909,7 @@
         setTimeout(() => URL.revokeObjectURL(url), 1000);
 
         updateSummary(totalRows, standardizedHeaders.size, totalSheets);
-        setStatus('Arquivo preenchido com sucesso. O layout original, logos e cabeçalhos foram preservados.', 'success');
+        setStatus('Arquivo preenchido com sucesso. O logo Bradesco.png foi inserido e o restante do layout foi preservado.', 'success');
       } catch (error) {
         console.error(error);
         setStatus(error.message || 'Não foi possível preencher o arquivo.', 'error');
