@@ -328,7 +328,7 @@
             <h3>Arquivo preenchido</h3>
             <p>Completa automaticamente as colunas padrão do layout de débito.</p>
             <div class="chips">
-              <span class="chip">Ticket 1234567891</span>
+              <span class="chip">Ticket: data + sequência</span>
               <span class="chip">Datas 14/07/26</span>
               <span class="chip">Tipo Débito</span>
             </div>
@@ -381,7 +381,7 @@
     let selectedFile = null;
 
     const standardValues = {
-      'Ticket': { value: '1234567891', type: 's' },
+      'Ticket': { value: '', type: 's', dynamic: 'ticket' },
       'Débito/Fee': { value: 0, type: 'n', format: '#,##0.00' },
       'Desconto/Rebate': { value: 0, type: 'n', format: '#,##0' },
       'Centro de Custo': { value: 'DEBITO COPASTUR', type: 's' },
@@ -426,6 +426,58 @@
       Object.entries(standardValues).map(([key, config]) => [normalize(key), { original: key, ...config }])
     );
     const normalizedRemove = new Set(columnsToRemove.map(normalize));
+
+
+    const dateHeaderAliases = new Set([
+      'data de emissão', 'data emissão', 'data da emissão', 'data emissao', 'emissão', 'emissao'
+    ].map(normalize));
+
+    function findCellInRow(row, columnNumber) {
+      return [...row.children].find(node =>
+        node.localName === 'c' && columnLettersToNumber(node.getAttribute('r')) === columnNumber
+      ) || null;
+    }
+
+    function datePrefixFromCell(cell, sharedStrings) {
+      const raw = cell ? String(cellDisplayValue(cell, sharedStrings)).trim() : '';
+      let year, month, day;
+
+      if (/^\d+(?:\.\d+)?$/.test(raw)) {
+        const serial = Number(raw);
+        if (serial > 20000 && serial < 100000) {
+          const utc = new Date(Date.UTC(1899, 11, 30) + Math.floor(serial) * 86400000);
+          year = utc.getUTCFullYear();
+          month = utc.getUTCMonth() + 1;
+          day = utc.getUTCDate();
+        }
+      }
+
+      if (!year) {
+        let match = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+        if (match) {
+          day = Number(match[1]);
+          month = Number(match[2]);
+          year = Number(match[3]);
+          if (year < 100) year += 2000;
+        } else {
+          match = raw.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
+          if (match) {
+            year = Number(match[1]);
+            month = Number(match[2]);
+            day = Number(match[3]);
+          }
+        }
+      }
+
+      if (!year || !month || !day) {
+        const now = new Date();
+        year = now.getFullYear();
+        month = now.getMonth() + 1;
+        day = now.getDate();
+      }
+
+      return `${String(year).slice(-2)}${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}`;
+    }
 
     function setStatus(message, type = 'info') {
       statusBox.className = `status show ${type}`;
@@ -840,17 +892,22 @@
           const rows = [...sheetXml.getElementsByTagNameNS('*', 'row')];
           let headerRow = null;
           let targets = [];
+          let dateColumn = null;
 
           for (const row of rows.slice(0, 50)) {
             const candidates = [];
+            let candidateDateColumn = null;
             for (const cell of [...row.children].filter(node => node.localName === 'c')) {
               const header = normalize(cellDisplayValue(cell, sharedStrings));
+              const column = columnLettersToNumber(cell.getAttribute('r'));
               const config = normalizedStandards.get(header);
-              if (config) candidates.push({ column: columnLettersToNumber(cell.getAttribute('r')), config, header });
+              if (config) candidates.push({ column, config, header });
+              if (dateHeaderAliases.has(header)) candidateDateColumn = column;
             }
             if (candidates.length >= 3) {
               headerRow = row;
               targets = candidates;
+              dateColumn = candidateDateColumn;
               break;
             }
           }
@@ -860,14 +917,31 @@
 
           const headerNumber = Number(headerRow.getAttribute('r')) || 1;
           let sheetRows = 0;
+          const ticketCounters = new Map();
           for (const row of rows) {
             const rowNumber = Number(row.getAttribute('r')) || 0;
             if (rowNumber <= headerNumber || !rowContainsData(row, sharedStrings)) continue;
 
             for (const { column, config } of targets) {
-              if (config.value === '') continue;
+              let effectiveConfig = config;
+
+              if (config.dynamic === 'ticket') {
+                const dateCell = dateColumn ? findCellInRow(row, dateColumn) : null;
+                const prefix = datePrefixFromCell(dateCell, sharedStrings);
+                const nextSequence = (ticketCounters.get(prefix) || 0) + 1;
+                if (nextSequence > 9999) {
+                  throw new Error(`A data ${prefix} possui mais de 9.999 linhas e ultrapassa o limite do Ticket de 10 dígitos.`);
+                }
+                ticketCounters.set(prefix, nextSequence);
+                effectiveConfig = {
+                  value: `${prefix}${String(nextSequence).padStart(4, '0')}`,
+                  type: 's'
+                };
+              }
+
+              if (effectiveConfig.value === '') continue;
               const cell = findOrCreateCell(sheetXml, row, column, rowNumber);
-              setCellValue(sheetXml, cell, config);
+              setCellValue(sheetXml, cell, effectiveConfig);
             }
             sheetRows++;
           }
